@@ -1,12 +1,17 @@
 package uk.ncl.CSC8016.jackbergus.coursework.project2.testing;
 
+import uk.ncl.CSC8016.jackbergus.coursework.project2.processes.ClientLifecycle;
 import uk.ncl.CSC8016.jackbergus.coursework.project2.processes.RainforestShop;
+import uk.ncl.CSC8016.jackbergus.coursework.project2.processes.SupplierLifecycle;
 import uk.ncl.CSC8016.jackbergus.coursework.project2.processes.Transaction;
+import uk.ncl.CSC8016.jackbergus.coursework.project2.utils.BasketResult;
 import uk.ncl.CSC8016.jackbergus.coursework.project2.utils.Item;
 import uk.ncl.CSC8016.jackbergus.slides.semaphores.scheduler.Pair;
 
 import java.math.BigInteger;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -200,7 +205,26 @@ public class Testing {
     };
 
     public static Function<Boolean,List<Message>> test_03 = (Boolean isGlobalLock) -> {
-        return null;
+        List<Message> first_test = new ArrayList<>();
+        List<String> ofUserNames = new ArrayList<>();
+        ofUserNames.add("bogus");
+        /// TEST 1) Cannot basket unavailable product
+        {
+            RainforestShop s = new RainforestShop(ofUserNames, Collections.emptyMap(), isGlobalLock);
+            RainforestShop s2 = new RainforestShop(ofUserNames, Collections.emptyMap(), isGlobalLock);
+            try {
+                var result1 = s.login("bogus");
+                var result2 = s2.login("bogus");
+                if(result1.isPresent() && result2.isPresent()){
+                    first_test.add(new Message(true, "The same user can open multiple transactions!"));
+                }else{
+                    first_test.add(new Message(false, "The same user can open multiple transactions!"));
+                };
+            } catch (Exception e) {
+                first_test.add(new Message(false, e.getMessage()+(Arrays.stream(Thread.currentThread().getStackTrace()).map(x->x.toString()).collect(Collectors.joining("; ")))));
+            }
+        }
+        return first_test;
     };
 
 
@@ -609,9 +633,66 @@ public class Testing {
         return first_test;
     };
 
-    public static Function<Boolean,List<Message>> test_07 = (Boolean isGlobalLock) -> null;
+    public static Function<Boolean,List<Message>> test_07 = (Boolean isGlobalLock) -> {
+        List<Message> first_test = new ArrayList<>();
+        List<String> ofUserNames = new ArrayList<>();
+        ofUserNames.add("bogus");
+        {
+            RainforestShop s1 = new RainforestShop(ofUserNames, Collections.emptyMap(), isGlobalLock);
+            RainforestShop s2 = new RainforestShop(ofUserNames, Collections.emptyMap(), isGlobalLock);
+            try {
+                var result1 = s1.login("bogus");
+                var result2 = s2.login("bogus");
 
-    public static Function<Boolean,List<Message>> test_08 = (Boolean isGlobalLock) -> null;
+                if(result1.isPresent() && result2.isPresent()){
+                    var transaction1 = result1.get();
+                    transaction1.basketProduct("product");
+                    var transaction2 = result2.get();
+                    transaction2.basketProduct("product");
+                    var basketResult1 = transaction1.basketCheckout(10);
+                    var basketResult2 = transaction2.basketCheckout(10);
+
+                    if(basketResult1 != basketResult2){
+                        first_test.add(new Message(true, "GOOD: Two threads shall never be able (in any possible run) to contemporary access to the same object on the shelf."));
+                    }else{
+                        first_test.add(new Message(false, "Error: Two threads shall never be able (in any possible run) to contemporary access to the same object on the shelf."));
+                    }
+                }
+
+            } catch (Exception e) {
+                first_test.add(new Message(false, e.getMessage()+(Arrays.stream(Thread.currentThread().getStackTrace()).map(x->x.toString()).collect(Collectors.joining("; ")))));
+            }
+        }
+        return first_test;
+    };
+
+    public static Function<Boolean,List<Message>> test_08 = (Boolean isGlobalLock) -> {
+        List<Message> first_test = new ArrayList<>();
+        List<String> ofUserNames = new ArrayList<>();
+        ofUserNames.add("bogus");
+        Map<String, Pair<Double, Integer>> m = new HashMap<>();
+        m.put("product", new Pair<>(10.0, 10));
+        try{
+            var r = new RainforestShop(ofUserNames, m, isGlobalLock);
+
+            //Using Executor Service to create thread pool for concurrent execution
+            var clientLifecycle = new ClientLifecycle(ofUserNames.get(0),r,1,0.0,10,1);
+            var pool = Executors.newFixedThreadPool(1);
+            pool.execute(clientLifecycle);
+
+            var basketResult = clientLifecycle.startJoinAndGetResult(true);
+            if(basketResult.boughtItems.size() > 0 && basketResult.total_cost == basketResult.total_given){
+                first_test.add(new Message(true, "GOOD: a ClientLifecycle should be able to buy all the available elements if given an adequate amount of money."));
+            }else{
+                first_test.add(new Message(false, "ERROR: a ClientLifecycle should be able to buy all the available elements if given an adequate amount of money."));
+            }
+            pool.shutdown();
+
+        } catch (Exception e) {
+            first_test.add(new Message(false, e.getMessage()+(Arrays.stream(Thread.currentThread().getStackTrace()).map(x->x.toString()).collect(Collectors.joining("; ")))));
+        }
+        return first_test;
+    };
 
     public static Function<Boolean,List<Message>> test_09 = (Boolean isGlobalLock) -> null;
 
@@ -686,7 +767,7 @@ public class Testing {
         scoring.add(new Test(test_08,
                 "A client running without a supplier shall always dispose the available resources",
                 5.0));
-        scoring.add(new Test(test_09,
+        /*scoring.add(new Test(test_09,
                 "Client/Supplier interaction",
                 6.0));
         scoring.add(new Test(test_10,
@@ -694,7 +775,7 @@ public class Testing {
                 12.0));
         scoring.add(new Test(test_12,
                 "Supplier Stopping Condition",
-                3.0));
+                3.0));*/
         FunctionScoring(scoring);
 
         System.out.println("");

@@ -109,9 +109,15 @@ public class RainforestShop {
      * @return
      */
     List<String> getAvailableItems(Transaction transaction) {
-        List<String> ls = Collections.emptyList();
-        // TODO: Implement the remaining part!
-        return ls;
+        List<String> basketedItems = transaction.getUnmutableBasket()
+                .stream()
+                .map(item -> item.productName)
+                .toList();
+
+        List<String> shelledItems = new ArrayList<>(transaction.getSelf().available_withdrawn_products.keySet().stream().toList());
+        shelledItems.removeAll(basketedItems);
+        return shelledItems;
+
     }
 
     /**
@@ -128,6 +134,10 @@ public class RainforestShop {
             Optional<Item> item = transaction.getSelf().available_withdrawn_products.get(name).getAvailableItem();
             result.set(item);
         }
+        /*if(transaction.getAvailableItems().contains(name)){
+            Optional<Item> item = transaction.getSelf().available_withdrawn_products.get(name).getAvailableItem();
+            result.set(item);
+        }*/
         return result.get();
     }
 
@@ -142,7 +152,6 @@ public class RainforestShop {
         boolean result = false;
         if (transaction.getSelf() == null || (transaction.getUuid() == null)) return false;
         if(transaction.getUnmutableBasket().contains(object)){
-            transaction.getUnmutableBasket().remove(object);
             result = true;
         }
         return result;

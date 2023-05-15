@@ -10,7 +10,6 @@ import uk.ncl.CSC8016.jackbergus.slides.semaphores.scheduler.Pair;
 
 import java.math.BigInteger;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -732,7 +731,76 @@ public class Testing {
         return first_test;
     };
 
-    public static Function<Boolean,List<Message>> test_09 = (Boolean isGlobalLock) -> null;
+    public static Function<Boolean,List<Message>> test_09 = (Boolean isGlobalLock) -> {
+        List<Message> first_test = new ArrayList<>();
+        List<String> ofUserNames = new ArrayList<>();
+
+        ofUserNames.add("user1");
+        var pool = Executors.newFixedThreadPool(3);
+
+        Map<String, Pair<Double, Integer>> m = new HashMap<>();
+        m.put("product",new Pair<>(10.0,1));
+
+        var r = new RainforestShop(ofUserNames, m, isGlobalLock);
+        var futureR = pool.submit(r);
+
+        var transaction = r.login("user1").get();
+        transaction.basketProduct("product");
+
+        var c = new ClientLifecycle("user1",r,1,0,10,0);
+        var futureC = pool.submit(c);
+
+        var s = new SupplierLifecycle(r);
+
+        boolean isTriggered = false;
+        try {
+            if(c.getBasketResult().boughtItems.size() > 0){
+                var futureS = pool.submit(s);
+                futureS.get();
+                isTriggered = true;
+            }
+
+            //Call get method to get the result from the threads executed
+            futureR.get();
+            futureC.get();
+
+            if(!isTriggered)
+                first_test.add(new Message(true,"GOOD: The supplier shall not be triggered if the products are basketed but not bought"));
+            else first_test.add(new Message(false,"ERROR: The supplier shall not be triggered if the products are basketed but not bought"));
+
+            isTriggered = false;
+
+            transaction.basketProduct("product");
+            //transaction.basketCheckout(10);
+
+            if(transaction.getUnmutableBasket().size()==0){
+                var futureS = pool.submit(s);
+                futureS.get();
+                isTriggered = true;
+            };
+
+            if(!isTriggered)
+                first_test.add(new Message(true,"GOOD: The supplier shall be triggered when a shelf for a given product is emptied"));
+            else first_test.add(new Message(false,"ERROR: The supplier shall be triggered when a shelf for a given product is emptied"));
+
+            r.refurbishWithItems(1,"product");
+            transaction.basketProduct("product");
+            transaction.basketCheckout(10);
+
+            var result = c.getBasketResult();
+            if(result != null)
+                first_test.add(new Message(true,"GOOD: After refurbishment, a client shall be able to buy at least one more product"));
+            else first_test.add(new Message(false,"ERROR: After refurbishment, a client shall be able to buy at least one more product"));
+
+            transaction.logout();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        pool.shutdown();
+
+        return first_test;
+    };
 
     public static Function<Boolean,List<Message>> test_10 = (Boolean isGlobalLock) -> null;
 
@@ -805,10 +873,10 @@ public class Testing {
         scoring.add(new Test(test_08,
                 "A client running without a supplier shall always dispose the available resources",
                 5.0));
-        /*scoring.add(new Test(test_09,
+        scoring.add(new Test(test_09,
                 "Client/Supplier interaction",
                 6.0));
-        scoring.add(new Test(test_10,
+        /*scoring.add(new Test(test_10,
                 "Client/Client interaction",
                 12.0));
         */scoring.add(new Test(test_12,
